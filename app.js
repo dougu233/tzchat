@@ -9,6 +9,21 @@ var express = require('express')
 
 var app = express();
 
+var MongoClient =require('mongodb').MongoClient;
+var DBString='mongodb://localhost:27017/chat';
+var registerUser = function(data,db,callback){
+	db.collection('user').insert(data,function(err,result){
+        console.log(result);
+		if(err)
+		{
+			console.log('Error:'+err);
+			return;
+		}
+		callback(err);
+	}
+	);
+};
+
 // all environments
 app.set('port', process.env.PORT || 3000);
 app.set('views', __dirname + '/views');
@@ -39,6 +54,31 @@ app.get('/', function (req, res) {
 app.get('/login', function (req, res) {
   res.sendfile('views/login.html');
 });
+app.get('/register', function (req, res) {
+  res.sendfile('views/register.html');
+});
+app.post('/register', function (req, res) {
+	
+	 var userId = req.body.LoginForm_email;
+	 console.log(userId);
+     var password = req.body.LoginForm_password;
+	 console.log(password);
+     var time = now();
+	 console.log(time);
+	 var data =[{"userId": userId, "password": password, "last_login_time": time}];
+	 console.log(data);
+	 MongoClient.connect(DBString,data,function(err,db){
+		   console.log("db connected");
+		   registerUser(data,db,function(){
+			   db.close();
+		   })
+        })
+     console.log("register success");
+
+
+    res.redirect('/login');
+  }
+);
 app.post('/login', function (req, res) {
   if (users[req.body.uid]) {
     // uid is alive
@@ -85,6 +125,7 @@ io.sockets.on('connection', function (socket) {
     }
   });
 
+
   // offline event
   socket.on('disconnect', function() {
     // 
@@ -96,7 +137,12 @@ io.sockets.on('connection', function (socket) {
     }
   });
 });
-
+    // get current time
+ function now() {
+        var date = new Date();
+        var time = date.getFullYear() + '-' + (date.getMonth() + 1) + '-' + date.getDate() + ' ' + date.getHours() + ':' + (date.getMinutes() < 10 ? ('0' + date.getMinutes()) : date.getMinutes()) + ":" + (date.getSeconds() < 10 ? ('0' + date.getSeconds()) : date.getSeconds());
+        return time;
+    }
 server.listen(app.get('port'), function(){
   console.log('Express server listening on port ' + app.get('port'));
 });
