@@ -3,83 +3,67 @@
  * Module dependencies.
  */
 
-var express = require('express')
-  , http = require('http')
-  , path = require('path');
-
+var express = require('express');
+var path = require('path');
+var favicon = require('serve-favicon');
+var logger = require('morgan');
+var cookieParser = require('cookie-parser');
+var bodyParser = require('body-parser');
+var errorHandler = require('express-error-handler');
+var debug = require('debug')('generated-express-app');
+var routes = require('./routes/index');
+//var routes = require('…/route/index');
+global.USERS = {};
+global.APP_PATH = __dirname;
 var app = express();
-
+// view engine setup
+app.set('views', path.join(__dirname, 'views'));
+app.set('view engine', 'ejs');
+app.set('routes', path.join(__dirname, 'routes'));
 var MongoClient =require('mongodb').MongoClient;
 var DBString='mongodb://localhost:27017/chat';
-var registerUser = function(data,db,callback){
-	db.collection('user').insert(data,function(err,result){
-        console.log(result);
-		if(err)
-		{
-			console.log('Error:'+err);
-			return;
-		}
-		callback(err);
-	}
-	);
-};
 
 // all environments
 app.set('port', process.env.PORT || 3000);
-app.set('views', __dirname + '/views');
-app.set('view engine', 'jade');
-app.use(express.favicon());
-app.use(express.logger('dev'));
-app.use(express.bodyParser());
-app.use(express.cookieParser());
-app.use(express.methodOverride());
-app.use(app.router);
+//app.use(express.favicon());
+//app.use(express.logger('dev'));
+
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({extended: true}));
+app.use(cookieParser());
+//app.use(express.methodOverride());
+
 app.use(express.static(path.join(__dirname, 'public')));
+
+//var MongoClient =require('mongodb').MongoClient;
+//var DBString='mongodb://localhost:27017/chat';
+
 
 // development only
 if ('development' == app.get('env')) {
-  app.use(express.errorHandler());
+  app.use(errorHandler());
 }
 
+
 // online users' list 
-var users = {};
-
-app.get('/', function (req, res) {
-  if (req.cookies.uid == null) {
-    res.redirect('/login');
-  } else {
-    res.sendfile('views/index.html');
-  }
-});
-app.get('/login', function (req, res) {
-  res.sendfile('views/login.html');
-});
-app.get('/register', function (req, res) {
-  res.sendfile('views/register.html');
-});
-app.post('/register', function (req, res) {
-	
-	 var userId = req.body.LoginForm_email;
-	 console.log(userId);
-     var password = req.body.LoginForm_password;
-	 console.log(password);
-     var time = now();
-	 console.log(time);
-	 var data =[{"userId": userId, "password": password, "last_login_time": time}];
-	 console.log(data);
-	 MongoClient.connect(DBString,data,function(err,db){
-		   console.log("db connected");
-		   registerUser(data,db,function(){
-			   db.close();
-		   })
-        })
-     console.log("register success");
 
 
-    res.redirect('/login');
-  }
-);
-app.post('/login', function (req, res) {
+app.use('/',routes);
+/*
+app.router('/')
+  .get(function (req, res) {
+    if (req.cookies.uid == null) {
+      res.redirect('/login');
+    } else {
+      res.sendfile('views/index.html');
+    }
+  });
+
+app.router('/login')
+  .get(function (req, res) {
+    res.sendfile('views/login.html');
+  })
+  .post(function (req, res) {
   if (users[req.body.uid]) {
     // uid is alive
     //##### TODO check from DB  #####//
@@ -91,7 +75,46 @@ app.post('/login', function (req, res) {
   }
 });
 
-var server = http.createServer(app);
+app.router('/register')
+  .get(function (req, res) {
+  res.sendfile('views/register.html');
+})
+  .post(register.registerUser);
+
+// catch 404 and forward to error handler
+app.use(function(req, res, next) {
+  var err = new Error('Not Found');
+  err.status = 404;
+  next(err);
+});
+
+// error handlers
+
+// development error handler
+// will print stacktrace
+if (app.get('env') === 'development') {
+  app.use(function(err, req, res, next) {
+    res.status(err.status || 500);
+    res.render('error', {
+      message: err.message,
+      error: err
+    });
+  });
+}
+
+// production error handler
+// no stacktraces leaked to user
+app.use(function(err, req, res, next) {
+  res.status(err.status || 500);
+  res.render('error', {
+    message: err.message,
+    error: {}
+  });
+});*/
+
+var server = app.listen(app.get('port'), function() {
+    debug('Express server listening on port ' + server.address().port);
+});
 var io = require('socket.io').listen(server);
 io.sockets.on('connection', function (socket) {
 
@@ -100,11 +123,11 @@ io.sockets.on('connection', function (socket) {
     // save uid as a socket object
     socket.name = data.uid;
     // if this uid is not in userlist,then save it  
-    if (!users[data.uid]) {
-      users[data.uid] = data.uid;
+    if (!global.USERS[data.uid]) {
+      global.USERS[data.uid] = data.uid;
     }
     // broadcast online information to everyone
-    io.sockets.emit('online', {users: users, user: data.uid});
+    io.sockets.emit('online', {users: global.USERS, user: data.uid});
   });
 
   // send message
@@ -129,20 +152,16 @@ io.sockets.on('connection', function (socket) {
   // offline event
   socket.on('disconnect', function() {
     // 
-    if (users[socket.name]) {
+    if (global.USERS[socket.name]) {
       
-      delete users[socket.name];
+      delete global.USERS[socket.name];
       // broadcast offline information to everyone
-      socket.broadcast.emit('offline', {users: users, user: socket.name});
+      socket.broadcast.emit('offline', {users: global.USERS, user: socket.name});
     }
   });
 });
-    // get current time
- function now() {
-        var date = new Date();
-        var time = date.getFullYear() + '-' + (date.getMonth() + 1) + '-' + date.getDate() + ' ' + date.getHours() + ':' + (date.getMinutes() < 10 ? ('0' + date.getMinutes()) : date.getMinutes()) + ":" + (date.getSeconds() < 10 ? ('0' + date.getSeconds()) : date.getSeconds());
-        return time;
-    }
 server.listen(app.get('port'), function(){
   console.log('Express server listening on port ' + app.get('port'));
 });
+
+module.exports = app;
